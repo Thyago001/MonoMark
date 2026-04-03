@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MonoMark — Editor Markdown</title>
+<link rel="icon" type="image/png" href="img/icon.png" />
+<link href="https://fonts.googleapis.com/css2?family=Ubuntu+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d0d0d;
+    --surface: #141414;
+    --surface2: #1c1c1c;
+    --border: #2a2a2a;
+    --border2: #333;
+    --text: #e0e0e0;
+    --text-dim: #666;
+    --text-muted: #444;
+    --accent: #c0392b;
+    --accent2: #e74c3c;
+    --accent-dim: rgba(192,57,43,0.15);
+    --green: #27ae60;
+    --blue: #2980b9;
+    --font: 'Ubuntu Mono', 'Courier New', monospace;
+    --radius: 4px;
+    --toolbar-h: 50px;
+    --statusbar-h: 28px;
+  }
+
+  html, body { height: 100%; overflow: hidden; }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    font-size: 14px;
+  }
+
+  /* ── TITLEBAR ── */
+  #titlebar {
+    height: 36px;
+    background: #0a0a0a;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 12px;
+    flex-shrink: 0;
+    user-select: none;
+  }
+  #titlebar .dot { width: 12px; height: 12px; border-radius: 50%; }
+  #titlebar .dot.r { background: #e74c3c; }
+  #titlebar .dot.y { background: #f39c12; }
+  #titlebar .dot.g { background: #2ecc71; }
+  #titlebar .app-name {
+    margin-left: auto;
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+  }
+  #titlebar .file-name {
+    margin-left: auto;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  #dirty-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+    display: none;
+    flex-shrink: 0;
+  }
+  #dirty-dot.visible { display: block; }
+
+  /* ── TOOLBAR ── */
+  #toolbar {
+    height: var(--toolbar-h);
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .tb-group {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+  .tb-sep {
+    width: 1px;
+    height: 22px;
+    background: var(--border2);
+    margin: 0 8px;
+  }
+  .tb-btn {
+    height: 32px;
+    min-width: 32px;
+    padding: 0 8px;
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--text-dim);
+    font-family: var(--font);
+    font-size: 13px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    transition: all 0.12s;
+    white-space: nowrap;
+  }
+  .tb-btn:hover {
+    background: var(--surface2);
+    border-color: var(--border2);
+    color: var(--text);
+  }
+  .tb-btn:active { transform: scale(0.97); }
+  .tb-btn svg { flex-shrink: 0; }
+
+  .tb-btn.save { color: var(--green); }
+  .tb-btn.save:hover { border-color: var(--green); background: rgba(39,174,96,0.1); }
+  .tb-btn.export { color: var(--accent2); }
+  .tb-btn.export:hover { border-color: var(--accent2); background: var(--accent-dim); }
+  .tb-btn.open { color: var(--blue); }
+  .tb-btn.open:hover { border-color: var(--blue); background: rgba(41,128,185,0.1); }
+
+  .tb-btn.active {
+    background: var(--surface2);
+    border-color: var(--border2);
+    color: var(--text);
+  }
+
+  #tb-right { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+
+  /* ── LAYOUT ── */
+  #workspace {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+  }
+
+  /* ── EDITOR ── */
+  #editor-pane {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    border-right: 1px solid var(--border);
+  }
+
+  #editor-label {
+    padding: 6px 14px;
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--text-muted);
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    text-transform: uppercase;
+    flex-shrink: 0;
+  }
+
+  #editor {
+    flex: 1;
+    padding: 24px 28px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 14px;
+    line-height: 1.7;
+    border: none;
+    outline: none;
+    resize: none;
+    caret-color: var(--accent2);
+    tab-size: 2;
+    overflow-y: auto;
+  }
+  #editor::selection { background: rgba(192,57,43,0.3); }
+  #editor::placeholder { color: var(--text-muted); }
+
+  /* ── PREVIEW ── */
+  #preview-pane {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  #preview-label {
+    padding: 6px 14px;
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--text-muted);
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    text-transform: uppercase;
+    flex-shrink: 0;
+  }
+
+  #preview {
+    flex: 1;
+    padding: 24px 32px;
+    overflow-y: auto;
+    background: #fff;
+    color: #2c2c2c;
+    font-family: 'Ubuntu Mono', 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  /* Preview styles — match the exported PDF exactly */
+  #preview h1 {
+    color: #000;
+    font-weight: 700;
+    border-bottom: 3px solid #000;
+    padding-bottom: 5px;
+    margin-bottom: 20px;
+    margin-top: 0;
+  }
+  #preview h2 {
+    color: #333;
+    font-weight: 700;
+    border-bottom: 2px solid #ccc;
+    padding-bottom: 4px;
+    margin-top: 22px;
+    margin-bottom: 14px;
+  }
+  #preview h3 {
+    color: #000;
+    font-weight: 700;
+    text-transform: uppercase;
+    border-bottom: 1px dashed #aea79f;
+    margin-top: 25px;
+    padding-bottom: 5px;
+    margin-bottom: 10px;
+  }
+  #preview h4, #preview h5, #preview h6 {
+    color: #333;
+    margin-top: 16px;
+    margin-bottom: 8px;
+  }
+  #preview strong { color: #000; font-weight: bold; }
+  #preview em { font-style: italic; }
+  #preview a {
+    color: #2e3436;
+    text-decoration: none;
+    border-bottom: 1px dotted #950303;
+  }
+  #preview ul, #preview ol {
+    margin-left: 0;
+    padding-left: 20px;
+    margin-bottom: 12px;
+  }
+  #preview li { margin-bottom: 4px; }
+  #preview li code {
+    background-color: #f0f0f0;
+    padding: 2px 5px;
+    border-radius: 3px;
+    font-family: 'Ubuntu Mono', monospace;
+    color: #c7254e;
+  }
+  #preview p { margin-bottom: 10px; }
+  #preview code {
+    background: #f0f0f0;
+    padding: 2px 5px;
+    border-radius: 3px;
+    font-family: 'Ubuntu Mono', monospace;
+    color: #c7254e;
+    font-size: 12px;
+  }
+  #preview pre {
+    background: #f5f5f5;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    margin-bottom: 14px;
+  }
+  #preview pre code {
+    background: none;
+    padding: 0;
+    color: #333;
+    font-size: 12px;
+  }
+  #preview blockquote {
+    border-left: 3px solid #aea79f;
+    margin: 0 0 12px 0;
+    padding: 4px 16px;
+    color: #666;
+    background: #fafafa;
+  }
+  #preview hr {
+    border: none;
+    border-top: 1px dashed #aea79f;
+    margin: 20px 0;
+  }
+  #preview table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 14px;
+    font-size: 12px;
+  }
+  #preview th, #preview td {
+    border: 1px solid #ddd;
+    padding: 6px 10px;
+    text-align: left;
+  }
+  #preview th { background: #f0f0f0; font-weight: 700; }
+  #preview img { max-width: 100%; border-radius: 3px; }
+
+  /* ── STATUS BAR ── */
+  #statusbar {
+    height: var(--statusbar-h);
+    background: #0a0a0a;
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 20px;
+    font-size: 11px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+  #statusbar span b { color: var(--text-dim); font-weight: 400; }
+  #statusbar .right { margin-left: auto; display: flex; gap: 16px; }
+
+  /* ── TOAST ── */
+  #toast {
+    position: fixed;
+    bottom: 50px;
+    right: 24px;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-left: 3px solid var(--green);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 12px;
+    padding: 9px 16px;
+    border-radius: var(--radius);
+    opacity: 0;
+    transform: translateY(8px);
+    transition: all 0.2s;
+    pointer-events: none;
+    z-index: 999;
+  }
+  #toast.show {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  #toast.error { border-left-color: var(--accent2); }
+
+  /* ── MODAL ── */
+  #modal-bg {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+  #modal-bg.open { display: flex; }
+  #modal {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 6px;
+    padding: 28px 32px;
+    min-width: 340px;
+    max-width: 480px;
+  }
+  #modal h2 {
+    font-size: 14px;
+    color: var(--text);
+    margin-bottom: 6px;
+    font-weight: 700;
+  }
+  #modal p { font-size: 12px; color: var(--text-dim); margin-bottom: 20px; line-height: 1.6; }
+  #modal input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border2);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 13px;
+    padding: 8px 12px;
+    outline: none;
+    margin-bottom: 16px;
+  }
+  #modal input:focus { border-color: var(--accent); }
+  #modal .modal-btns { display: flex; gap: 8px; justify-content: flex-end; }
+  #modal .modal-btns button {
+    padding: 8px 18px;
+    border-radius: var(--radius);
+    font-family: var(--font);
+    font-size: 12px;
+    cursor: pointer;
+    border: 1px solid var(--border2);
+    background: transparent;
+    color: var(--text-dim);
+  }
+  #modal .modal-btns button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+
+  /* ── FOCUS MODE ── */
+  body.focus-mode #preview-pane { display: none; }
+  body.focus-mode #editor-pane { border-right: none; }
+  body.preview-mode #editor-pane { display: none; }
+  body.preview-mode #preview-pane { flex: 1; }
+
+  /* ── PRINT / PDF ── */
+  @media print {
+    body * { visibility: hidden !important; }
+    #print-content, #print-content * { visibility: visible !important; }
+    #print-content {
+      position: fixed; left: 0; top: 0;
+      width: 100%; height: 100%;
+      background: white;
+      padding: 20px;
+    }
+  }
+  #print-content { display: none; }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a3a3a; }
+</style>
+</head>
+<body>
+
+<!-- TITLEBAR -->
+<div id="titlebar">
+  <div class="dot r"></div>
+  <div class="dot y"></div>
+  <div class="dot g"></div>
+  <div id="dirty-dot"></div>
+  <span class="file-name" id="filename-display">sem título.md</span>
+  <span class="app-name">MonoMark</span>
+</div>
+
+<!-- TOOLBAR -->
+<div id="toolbar">
+
+  <!-- File ops -->
+  <div class="tb-group">
+    <button class="tb-btn open" onclick="openFile()" title="Abrir arquivo (Ctrl+O)">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+      <span>Abrir</span>
+    </button>
+    <button class="tb-btn save" onclick="saveFile()" title="Salvar (Ctrl+S)">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+      <span>Salvar</span>
+    </button>
+    <button class="tb-btn save" onclick="saveFileAs()" title="Salvar como… (Ctrl+Shift+S)" style="color:#2ecc71">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/><line x1="20" y1="8" x2="24" y2="8"/><line x1="22" y1="6" x2="22" y2="10"/></svg>
+      <span>Salvar como</span>
+    </button>
+  </div>
+
+  <div class="tb-sep"></div>
+
+  <!-- Format -->
+  <div class="tb-group">
+    <button class="tb-btn" onclick="wrapSel('**','**')" title="Negrito (Ctrl+B)">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 4h8a4 4 0 010 8H6z"/><path d="M6 12h9a4 4 0 010 8H6z"/></svg>
+    </button>
+    <button class="tb-btn" onclick="wrapSel('*','*')" title="Itálico (Ctrl+I)">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="4" x2="10" y2="4"/><line x1="14" y1="20" x2="5" y2="20"/><line x1="15" y1="4" x2="9" y2="20"/></svg>
+    </button>
+    <button class="tb-btn" onclick="wrapSel('~~','~~')" title="Tachado">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><path d="M16 6c0-1.7-1.8-3-4-3s-4 1.3-4 3 1.8 3 4 3"/><path d="M8 18c0 1.7 1.8 3 4 3s4-1.3 4-3"/></svg>
+    </button>
+    <button class="tb-btn" onclick="wrapSel('`','`')" title="Código inline">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+    </button>
+  </div>
+
+  <div class="tb-sep"></div>
+
+  <!-- Headings -->
+  <div class="tb-group">
+    <button class="tb-btn" onclick="insertHeading(1)" title="Título H1"><b>H1</b></button>
+    <button class="tb-btn" onclick="insertHeading(2)" title="Título H2"><b>H2</b></button>
+    <button class="tb-btn" onclick="insertHeading(3)" title="Título H3"><b>H3</b></button>
+  </div>
+
+  <div class="tb-sep"></div>
+
+  <!-- Lists & Blocks -->
+  <div class="tb-group">
+    <button class="tb-btn" onclick="insertLine('- ')" title="Lista não ordenada">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3" cy="6" r="1.5" fill="currentColor"/><circle cx="3" cy="12" r="1.5" fill="currentColor"/><circle cx="3" cy="18" r="1.5" fill="currentColor"/></svg>
+    </button>
+    <button class="tb-btn" onclick="insertLine('1. ')" title="Lista numerada">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="10" y1="6" x2="21" y2="6"/><line x1="10" y1="12" x2="21" y2="12"/><line x1="10" y1="18" x2="21" y2="18"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/></svg>
+    </button>
+    <button class="tb-btn" onclick="insertLine('> ')" title="Citação / Blockquote">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"/><path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z"/></svg>
+    </button>
+    <button class="tb-btn" onclick="insertCodeBlock()" title="Bloco de código">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="12" y1="8" x2="12" y2="16"/></svg>
+    </button>
+    <button class="tb-btn" onclick="insertLine('---')" title="Linha horizontal">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
+    <button class="tb-btn" onclick="insertLink()" title="Inserir link">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+    </button>
+    <button class="tb-btn" onclick="insertTable()" title="Inserir tabela">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
+    </button>
+  </div>
+
+  <div class="tb-sep"></div>
+
+  <!-- Export -->
+  <div class="tb-group">
+    <button class="tb-btn export" onclick="exportPDF()" title="Exportar PDF">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+      <span>Exportar PDF</span>
+    </button>
+    <button class="tb-btn" onclick="exportHTML()" title="Exportar HTML" style="color:#9b59b6">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+      <span>HTML</span>
+    </button>
+    <button class="tb-btn" onclick="copyMD()" title="Copiar Markdown" style="color:#95a5a6">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+    </button>
+  </div>
+
+  <!-- Right side -->
+  <div id="tb-right">
+    <button class="tb-btn" id="btn-focus" onclick="toggleMode('focus')" title="Modo foco (só editor)">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/></svg>
+    </button>
+    <button class="tb-btn" id="btn-preview" onclick="toggleMode('preview')" title="Modo prévia (só preview)">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+    </button>
+    <button class="tb-btn" id="btn-split" onclick="toggleMode('split')" title="Modo dividido" class="active">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
+    </button>
+    <div class="tb-sep"></div>
+    <button class="tb-btn" onclick="newFile()" title="Novo arquivo (Ctrl+N)">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+      <span>Novo</span>
+    </button>
+  </div>
+</div>
+
+<!-- WORKSPACE -->
+<div id="workspace">
+  <div id="editor-pane">
+    <div id="editor-label">✎ EDITOR MARKDOWN</div>
+    <textarea id="editor" placeholder="# Comece a escrever seu Markdown aqui…
+
+## Sobre o MonoMark
+
+Editor **minimalista** para Linux com suporte a:
+
+- Sintaxe completa de Markdown
+- Exportação para *PDF* com estilo personalizado
+- Salvamento local de arquivos `.md`
+
+### Atalhos úteis
+
+| Ação | Atalho |
+|------|--------|
+| Salvar | `Ctrl+S` |
+| Negrito | `Ctrl+B` |
+| Itálico | `Ctrl+I` |
+
+---
+
+> Escreva sem distrações. Exporte com elegância.
+"></textarea>
+  </div>
+
+  <div id="preview-pane">
+    <div id="preview-label">◉ PRÉVIA RENDERIZADA</div>
+    <div id="preview"></div>
+  </div>
+</div>
+
+<!-- STATUS BAR -->
+<div id="statusbar">
+  <span><b id="st-words">0</b> palavras</span>
+  <span><b id="st-chars">0</b> caracteres</span>
+  <span><b id="st-lines">0</b> linhas</span>
+  <span><b id="st-cursor">Ln 1, Col 1</b></span>
+  <div class="right">
+    <span id="st-mode">DIVIDIDO</span>
+    <span>Markdown</span>
+    <span>UTF-8</span>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<!-- SAVE MODAL -->
+<div id="modal-bg">
+  <div id="modal">
+    <h2>💾 Salvar arquivo</h2>
+    <p>Digite o nome do arquivo. O conteúdo será baixado no seu computador.<br/>Mova para o diretório desejado após o download.</p>
+    <input type="text" id="modal-input" value="documento.md" />
+    <div class="modal-btns">
+      <button onclick="closeModal()">Cancelar</button>
+      <button class="primary" onclick="confirmSave()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- PRINT CONTENT -->
+<div id="print-content"></div>
+
+<script>
+const editor = document.getElementById('editor');
+const preview = document.getElementById('preview');
+const toast = document.getElementById('toast');
+
+let currentFile = null;
+let isDirty = false;
+let currentMode = 'split';
+let toastTimer = null;
+
+// ── DEFAULT CONTENT ──
+const defaultContent = `# Bem-vindo ao MonoMark
+
+Editor Markdown minimalista para Linux com exportação PDF.
+
+## Formatação básica
+
+**Negrito**, *itálico*, ~~tachado~~, \`código inline\`.
+
+### Lista de recursos
+
+- Syntax highlighting na prévia
+- Exportação PDF com estilo customizado
+- Salvar e abrir arquivos \`.md\`
+- Atalhos de teclado completos
+- Modos: dividido, foco e prévia
+
+### Exemplo de tabela
+
+| Recurso | Suporte |
+|---------|---------|
+| Negrito / Itálico | ✓ |
+| Tabelas | ✓ |
+| Blocos de código | ✓ |
+| Exportação PDF | ✓ |
+
+### Bloco de código
+
+\`\`\`bash
+# Abra o MonoMark direto no navegador
+xdg-open markdown-editor.html
+\`\`\`
+
+> **Dica:** Use \`Ctrl+S\` para salvar e o botão **Exportar PDF** para gerar o documento.
+
+---
+
+*MonoMark — escreva sem distrações.*
+`;
+
+editor.value = defaultContent;
+
+// ── MARKED CONFIG ──
+marked.setOptions({ breaks: true, gfm: true });
+
+function render() {
+  preview.innerHTML = marked.parse(editor.value);
+  updateStats();
+  markDirty();
+}
+
+// ── STATS ──
+function updateStats() {
+  const val = editor.value;
+  const words = val.trim() === '' ? 0 : val.trim().split(/\s+/).length;
+  const chars = val.length;
+  const lines = val.split('\n').length;
+  document.getElementById('st-words').textContent = words;
+  document.getElementById('st-chars').textContent = chars;
+  document.getElementById('st-lines').textContent = lines;
+}
+
+function updateCursor() {
+  const pos = editor.selectionStart;
+  const before = editor.value.substring(0, pos);
+  const ln = before.split('\n').length;
+  const col = pos - before.lastIndexOf('\n');
+  document.getElementById('st-cursor').textContent = `Ln ${ln}, Col ${col}`;
+}
+
+// ── DIRTY STATE ──
+function markDirty() {
+  if (!isDirty) {
+    isDirty = true;
+    document.getElementById('dirty-dot').classList.add('visible');
+  }
+}
+function markClean() {
+  isDirty = false;
+  document.getElementById('dirty-dot').classList.remove('visible');
+}
+
+// ── TOAST ──
+function showToast(msg, type = 'ok') {
+  clearTimeout(toastTimer);
+  toast.textContent = msg;
+  toast.className = type === 'error' ? 'show error' : 'show';
+  toastTimer = setTimeout(() => { toast.className = ''; }, 2800);
+}
+
+// ── MODES ──
+function toggleMode(mode) {
+  const body = document.body;
+  body.classList.remove('focus-mode', 'preview-mode');
+  const btnFocus = document.getElementById('btn-focus');
+  const btnPreview = document.getElementById('btn-preview');
+  const btnSplit = document.getElementById('btn-split');
+  btnFocus.classList.remove('active');
+  btnPreview.classList.remove('active');
+  btnSplit.classList.remove('active');
+
+  if (mode === 'focus') {
+    if (currentMode === 'focus') { currentMode = 'split'; btnSplit.classList.add('active'); document.getElementById('st-mode').textContent = 'DIVIDIDO'; }
+    else { currentMode = 'focus'; body.classList.add('focus-mode'); btnFocus.classList.add('active'); document.getElementById('st-mode').textContent = 'FOCO'; }
+  } else if (mode === 'preview') {
+    if (currentMode === 'preview') { currentMode = 'split'; btnSplit.classList.add('active'); document.getElementById('st-mode').textContent = 'DIVIDIDO'; }
+    else { currentMode = 'preview'; body.classList.add('preview-mode'); btnPreview.classList.add('active'); document.getElementById('st-mode').textContent = 'PRÉVIA'; }
+  } else {
+    currentMode = 'split'; btnSplit.classList.add('active'); document.getElementById('st-mode').textContent = 'DIVIDIDO';
+  }
+}
+
+// ── FORMATTING HELPERS ──
+function wrapSel(before, after) {
+  const s = editor.selectionStart, e = editor.selectionEnd;
+  const sel = editor.value.substring(s, e);
+  const rep = before + (sel || 'texto') + after;
+  editor.setRangeText(rep, s, e, 'select');
+  editor.focus();
+  render();
+}
+
+function insertLine(prefix) {
+  const s = editor.selectionStart;
+  const before = editor.value.substring(0, s);
+  const after = editor.value.substring(s);
+  const nl = before.length > 0 && !before.endsWith('\n') ? '\n' : '';
+  const insertion = nl + prefix;
+  editor.setRangeText(insertion, s, s, 'end');
+  editor.focus();
+  render();
+}
+
+function insertHeading(level) {
+  const prefix = '#'.repeat(level) + ' ';
+  const s = editor.selectionStart;
+  const lineStart = editor.value.lastIndexOf('\n', s - 1) + 1;
+  const lineEnd = editor.value.indexOf('\n', s);
+  const end = lineEnd === -1 ? editor.value.length : lineEnd;
+  const line = editor.value.substring(lineStart, end);
+  const clean = line.replace(/^#+\s*/, '');
+  editor.setRangeText(prefix + clean, lineStart, end, 'end');
+  editor.focus();
+  render();
+}
+
+function insertCodeBlock() {
+  const s = editor.selectionStart, e = editor.selectionEnd;
+  const sel = editor.value.substring(s, e);
+  const rep = '\n```\n' + (sel || 'código aqui') + '\n```\n';
+  editor.setRangeText(rep, s, e, 'select');
+  editor.focus();
+  render();
+}
+
+function insertLink() {
+  const s = editor.selectionStart, e = editor.selectionEnd;
+  const sel = editor.value.substring(s, e);
+  const rep = '[' + (sel || 'texto do link') + '](https://exemplo.com)';
+  editor.setRangeText(rep, s, e, 'end');
+  editor.focus();
+  render();
+}
+
+function insertTable() {
+  const table = '\n| Coluna 1 | Coluna 2 | Coluna 3 |\n|----------|----------|----------|\n| Célula 1 | Célula 2 | Célula 3 |\n| Célula 4 | Célula 5 | Célula 6 |\n';
+  const s = editor.selectionStart;
+  editor.setRangeText(table, s, s, 'end');
+  editor.focus();
+  render();
+}
+
+// ── FILE OPS ──
+function newFile() {
+  if (isDirty && !confirm('Há alterações não salvas. Deseja continuar?')) return;
+  editor.value = '';
+  currentFile = null;
+  isDirty = false;
+  document.getElementById('filename-display').textContent = 'sem título.md';
+  document.getElementById('dirty-dot').classList.remove('visible');
+  render();
+  showToast('📄 Novo arquivo criado');
+}
+
+function openFile() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.md,.txt,.markdown';
+  input.onchange = e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      editor.value = ev.target.result;
+      currentFile = file.name;
+      document.getElementById('filename-display').textContent = file.name;
+      markClean();
+      render();
+      showToast('📂 ' + file.name + ' aberto');
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+}
+
+function saveFile() {
+  if (currentFile) {
+    downloadMD(currentFile);
+  } else {
+    openSaveModal();
+  }
+}
+
+function saveFileAs() { openSaveModal(); }
+
+function downloadMD(name) {
+  const blob = new Blob([editor.value], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  a.click();
+  URL.revokeObjectURL(url);
+  markClean();
+  document.getElementById('filename-display').textContent = name;
+  showToast('💾 Salvo: ' + name);
+}
+
+// Modal
+function openSaveModal() {
+  const cur = currentFile || 'documento.md';
+  document.getElementById('modal-input').value = cur;
+  document.getElementById('modal-bg').classList.add('open');
+  setTimeout(() => document.getElementById('modal-input').select(), 50);
+}
+function closeModal() { document.getElementById('modal-bg').classList.remove('open'); }
+function confirmSave() {
+  let name = document.getElementById('modal-input').value.trim();
+  if (!name) name = 'documento.md';
+  if (!name.endsWith('.md')) name += '.md';
+  closeModal();
+  currentFile = name;
+  downloadMD(name);
+}
+
+// ── EXPORTING FOR PDF ──
+function exportPDF() {
+  const htmlContent = marked.parse(editor.value);
+  const title = (currentFile || 'documento').replace('.md', '');
+  const printWin = window.open('', '_blank', 'width=900,height=700');
+  printWin.document.write(`<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>${title}</title>
+<link href="https://fonts.googleapis.com/css2?family=Ubuntu+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Ubuntu+Mono:ital,wght@0,400;0,700;1,400&display=swap');
+body {
+  font-family: 'Ubuntu Mono', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #2c2c2c;
+  padding: 20px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+h1 {
+  color: #000000;
+  font-weight: 700;
+  border-bottom: 3px solid #000000;
+  padding-bottom: 5px;
+  margin-bottom: 20px;
+}
+h2 {
+  color: #333;
+  font-weight: 700;
+  border-bottom: 2px solid #ccc;
+  padding-bottom: 4px;
+  margin-top: 22px;
+}
+h3 {
+  color: #000000;
+  font-weight: 700;
+  text-transform: uppercase;
+  border-bottom: 1px dashed #aea79f;
+  margin-top: 25px;
+  padding-bottom: 5px;
+}
+h4, h5, h6 { color: #333; margin-top: 16px; }
+strong { color: #000000; font-weight: bold; }
+em { font-style: italic; }
+a {
+  color: #2e3436;
+  text-decoration: none;
+  border-bottom: 1px dotted #950303;
+}
+ul { margin-left: 0; padding-left: 20px; }
+li { margin-bottom: 4px; }
+li code {
+  background-color: #f0f0f0;
+  padding: 2px 5px;
+  border-radius: 3px;
+  font-family: 'Ubuntu Mono', monospace;
+  color: #c7254e;
+}
+p { margin-bottom: 10px; }
+code {
+  background: #f0f0f0;
+  padding: 2px 5px;
+  border-radius: 3px;
+  font-family: 'Ubuntu Mono', monospace;
+  color: #c7254e;
+  font-size: 12px;
+}
+pre {
+  background: #f5f5f5;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 14px 16px;
+  overflow-x: auto;
+  margin-bottom: 14px;
+}
+pre code { background: none; padding: 0; color: #333; font-size: 12px; }
+blockquote {
+  border-left: 3px solid #aea79f;
+  margin: 0 0 12px 0;
+  padding: 4px 16px;
+  color: #666;
+  background: #fafafa;
+}
+hr { border: none; border-top: 1px dashed #aea79f; margin: 20px 0; }
+table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 12px; }
+th, td { border: 1px solid #ddd; padding: 6px 10px; text-align: left; }
+th { background: #f0f0f0; font-weight: 700; }
+img { max-width: 100%; }
+@media print {
+  body { padding: 0; }
+  @page { margin: 1.5cm; }
+}
+</style>
+</head>
+<body>
+${htmlContent}
+<script>
+window.onload = function() {
+  setTimeout(function() { window.print(); window.close(); }, 800);
+};
+<\/script>
+</body>
+</html>`);
+  printWin.document.close();
+  showToast('📄 Janela de impressão/PDF aberta');
+}
+
+// ── EXPORTING FOR HTML ──
+function exportHTML() {
+  const htmlContent = marked.parse(editor.value);
+  const title = (currentFile || 'documento').replace('.md', '');
+  const full = `<!DOCTYPE html>\n<html lang="pt-BR">\n<head>\n<meta charset="UTF-8">\n<title>${title}</title>\n<link href="https://fonts.googleapis.com/css2?family=Ubuntu+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">\n<style>\nbody{font-family:'Ubuntu Mono','Courier New',monospace;font-size:13px;line-height:1.5;color:#2c2c2c;padding:20px;max-width:800px;margin:0 auto}\nh1{color:#000;font-weight:700;border-bottom:3px solid #000;padding-bottom:5px;margin-bottom:20px}\nh3{color:#000;font-weight:700;text-transform:uppercase;border-bottom:1px dashed #aea79f;margin-top:25px;padding-bottom:5px}\nstrong{color:#000;font-weight:bold}\na{color:#2e3436;text-decoration:none;border-bottom:1px dotted #950303}\nul{margin-left:0;padding-left:20px}\nli{margin-bottom:4px}\nli code{background-color:#f0f0f0;padding:2px 5px;border-radius:3px;font-family:'Ubuntu Mono',monospace;color:#c7254e}\ncode{background:#f0f0f0;padding:2px 5px;border-radius:3px;color:#c7254e}\npre{background:#f5f5f5;border:1px solid #ddd;border-radius:4px;padding:14px 16px}\ntable{width:100%;border-collapse:collapse}\nth,td{border:1px solid #ddd;padding:6px 10px}\nth{background:#f0f0f0}\n</style>\n</head>\n<body>\n${htmlContent}\n</body>\n</html>`;
+  const blob = new Blob([full], { type: 'text/html;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = title + '.html';
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('🌐 HTML exportado');
+}
+
+// ── COPY TO MD ──
+function copyMD() {
+  navigator.clipboard.writeText(editor.value).then(() => {
+    showToast('📋 Markdown copiado');
+  });
+}
+
+// ── KEYBOARD SHORTCUTS (I CAN ADD MORE IN THE FUTURE) ──
+document.addEventListener('keydown', e => {
+  const ctrl = e.ctrlKey || e.metaKey;
+  if (ctrl && e.key === 's') { e.preventDefault(); if (e.shiftKey) saveFileAs(); else saveFile(); }
+  if (ctrl && e.key === 'n') { e.preventDefault(); newFile(); }
+  if (ctrl && e.key === 'o') { e.preventDefault(); openFile(); }
+  if (ctrl && e.key === 'b') { e.preventDefault(); wrapSel('**','**'); }
+  if (ctrl && e.key === 'i') { e.preventDefault(); wrapSel('*','*'); }
+  if (e.key === 'Tab' && document.activeElement === editor) {
+    e.preventDefault();
+    const s = editor.selectionStart, end = editor.selectionEnd;
+    editor.setRangeText('  ', s, end, 'end');
+    render();
+  }
+  if (e.key === 'Escape') closeModal();
+});
+
+// ── EVENTS ──
+editor.addEventListener('input', render);
+editor.addEventListener('keyup', updateCursor);
+editor.addEventListener('click', updateCursor);
+
+// Close modal basic
+document.getElementById('modal-bg').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal-bg')) closeModal();
+});
+document.getElementById('modal-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') confirmSave();
+});
+
+// ── INIT ──
+document.getElementById('btn-split').classList.add('active');
+render();
+updateStats();
+markClean();
+</script>
+</body>
+</html>
